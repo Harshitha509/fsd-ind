@@ -1,13 +1,19 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { User, Code2, Plus, X } from 'lucide-react';
+import { User, Code2, Plus, X, Upload, FileText } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Initialize PDF.js worker using Cloudflare CDN to avoid Vite build configuration issues
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 const Profile = () => {
   const { user, setUser } = useContext(AuthContext);
   const [skills, setSkills] = useState([]);
   const [newSkill, setNewSkill] = useState('');
   const [message, setMessage] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (user?.skills) {
@@ -45,6 +51,61 @@ const Profile = () => {
     }
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setMessage('Please upload a PDF file.');
+      return;
+    }
+
+    setIsUploading(true);
+    setMessage('Analyzing resume for skills...');
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fullText += pageText + ' ';
+      }
+
+      // A solid dictionary of tech skills to look for in the resume
+      const commonSkills = [
+        'react', 'node.js', 'javascript', 'typescript', 'python', 'java', 'c++', 'c#', 'ruby', 'go', 'rust',
+        'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'sql', 'mysql', 'postgresql', 'mongodb', 'redis',
+        'html', 'css', 'sass', 'tailwind', 'bootstrap', 'angular', 'vue', 'svelte', 'express', 'django',
+        'flask', 'spring', 'git', 'github', 'gitlab', 'ci/cd', 'jenkins', 'agile', 'scrum', 'machine learning',
+        'data analysis', 'figma', 'graphql', 'rest api', 'linux', 'unix', 'bash', 'powershell', 'php', 'laravel'
+      ];
+      
+      const textLower = fullText.toLowerCase();
+      const foundSkills = commonSkills.filter(skill => {
+        const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedSkill}\\b`, 'i');
+        return regex.test(textLower);
+      });
+
+      if (foundSkills.length > 0) {
+        const newSkillsList = [...new Set([...skills, ...foundSkills])];
+        setSkills(newSkillsList);
+        setMessage(`Successfully extracted ${foundSkills.length} skills from your resume! Don't forget to click Save.`);
+      } else {
+        setMessage('No recognized technical skills found in the resume.');
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage('Failed to read PDF file.');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-8">
@@ -61,9 +122,33 @@ const Profile = () => {
             </div>
             <h2 className="text-xl font-bold text-white">{user?.name}</h2>
             <p className="text-slate-400 text-sm mb-4">{user?.email}</p>
-            <div className="w-full bg-dark-700 rounded-lg p-3 text-left">
+            <div className="w-full bg-dark-700 rounded-lg p-3 text-left mb-4">
               <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Skills</div>
               <div className="text-2xl font-bold text-primary-400">{skills.length}</div>
+            </div>
+
+            {/* Resume Upload Button */}
+            <div className="w-full pt-4 border-t border-dark-700">
+              <input 
+                type="file" 
+                accept=".pdf" 
+                className="hidden" 
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="w-full flex items-center justify-center space-x-2 py-2.5 bg-dark-700 hover:bg-dark-600 text-slate-300 rounded-lg transition-colors border border-dark-600 disabled:opacity-50"
+              >
+                {isUploading ? (
+                  <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                <span className="text-sm font-medium">{isUploading ? 'Extracting...' : 'Auto-fill from Resume'}</span>
+              </button>
+              <p className="text-xs text-slate-500 mt-2 text-center">Upload PDF to auto-extract skills</p>
             </div>
           </div>
         </div>
@@ -79,7 +164,7 @@ const Profile = () => {
             <input
               type="text"
               className="input-field"
-              placeholder="Add a new skill (e.g., React, Node.js)"
+              placeholder="Add a new skill manually (e.g., React, Node.js)"
               value={newSkill}
               onChange={(e) => setNewSkill(e.target.value)}
             />
@@ -93,7 +178,7 @@ const Profile = () => {
             {skills.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-500 pt-10">
                 <Code2 className="h-10 w-10 mb-2 opacity-50" />
-                <p>No skills added yet. Add some above!</p>
+                <p>No skills added yet. Add some above or upload your resume!</p>
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -113,11 +198,12 @@ const Profile = () => {
           </div>
 
           <div className="mt-6 flex items-center justify-between">
-            <div className={`text-sm ${message.includes('success') ? 'text-green-400' : 'text-red-400'}`}>
+            <div className={`text-sm ${message.includes('success') || message.includes('Successfully') ? 'text-green-400' : 'text-amber-400'}`}>
               {message}
             </div>
-            <button onClick={saveSkills} className="btn-primary">
-              Save Changes
+            <button onClick={saveSkills} className="btn-primary flex items-center space-x-2">
+              <Upload className="h-4 w-4" />
+              <span>Save Changes</span>
             </button>
           </div>
         </div>
