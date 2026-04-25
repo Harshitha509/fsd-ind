@@ -68,13 +68,8 @@ export const AuthProvider = ({ children }) => {
     });
     if (error) throw error;
 
-    // After signup, we need to create a profile entry
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([{ id: data.user.id, name, email, skills: [] }]);
-        
-      if (profileError) throw profileError;
+    if (!data.session) {
+      throw new Error("Success! Please check your email to confirm your account.");
     }
   };
 
