@@ -40,12 +40,7 @@ const Sidebar = () => {
         ))}
       </nav>
       
-      <div className="p-4 border-t border-dark-700 m-3 rounded-xl bg-gradient-to-br from-dark-700 to-dark-800 text-center">
-        <p className="text-xs text-slate-400 mb-2">Ready to level up?</p>
-        <button className="w-full py-2 bg-primary-500/20 text-primary-400 text-sm font-semibold rounded-lg border border-primary-500/30 hover:bg-primary-500 hover:text-white transition-all">
-          Explore Pro
-        </button>
-      </div>
+
     </aside>
   );
 };
